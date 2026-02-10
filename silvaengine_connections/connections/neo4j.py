@@ -192,14 +192,12 @@ class Neo4jConnection(BaseConnection[Driver]):
         except ServiceUnavailable as e:
             raise ConnectionError(
                 f"Neo4j service unavailable: {str(e)}",
-                connection_type="neo4j",
-                original_error=e,
+                details={"connection_type": "neo4j", "original_error": str(e)},
             )
         except Neo4jError as e:
             raise ConnectionError(
                 f"Neo4j connection failed: {str(e)}",
-                connection_type="neo4j",
-                original_error=e,
+                details={"connection_type": "neo4j", "original_error": str(e)},
             )
 
     def close(self) -> None:
@@ -249,7 +247,7 @@ class Neo4jConnection(BaseConnection[Driver]):
         """
         if not self._driver or self._is_closed:
             raise ConnectionError(
-                "Connection not established or already closed", connection_type="neo4j"
+                "Connection not established or already closed", details={"connection_type": "neo4j"}
             )
 
         db = database or self._default_database
@@ -278,7 +276,7 @@ class Neo4jConnection(BaseConnection[Driver]):
         """
         if not self._driver or self._is_closed:
             raise ConnectionError(
-                "Connection not established or already closed", connection_type="neo4j"
+                "Connection not established or already closed", details={"connection_type": "neo4j"}
             )
 
         try:
@@ -288,8 +286,7 @@ class Neo4jConnection(BaseConnection[Driver]):
         except Neo4jError as e:
             raise ConnectionError(
                 f"Cypher query execution failed: {str(e)}",
-                connection_type="neo4j",
-                original_error=e,
+                details={"connection_type": "neo4j", "original_error": str(e)},
             )
 
     def run_transaction(
@@ -307,7 +304,7 @@ class Neo4jConnection(BaseConnection[Driver]):
         """
         if not self._driver or self._is_closed:
             raise ConnectionError(
-                "Connection not established or already closed", connection_type="neo4j"
+                "Connection not established or already closed", details={"connection_type": "neo4j"}
             )
 
         with self.session(database=database) as session:
@@ -345,7 +342,9 @@ class Neo4jConnectionPool(BaseConnectionPool[Neo4jConnection]):
         max_size: int = 10,
         max_idle_time: float = 300.0,
         max_lifetime: float = 3600.0,
+        wait_timeout: float = 10.0,
         health_check_interval: float = 60.0,
+        enable_dynamic_resize: bool = True,
     ) -> None:
         """
         Initialize Neo4j Connection Pool
@@ -357,7 +356,9 @@ class Neo4jConnectionPool(BaseConnectionPool[Neo4jConnection]):
             max_size: Maximum number of connections
             max_idle_time: Maximum idle time (seconds)
             max_lifetime: Maximum connection lifetime (seconds)
+            wait_timeout: Connection acquisition timeout (seconds)
             health_check_interval: Health check interval (seconds)
+            enable_dynamic_resize: Whether to enable dynamic pool resizing
         """
         # Build connection configuration dictionary
         conn_config = {
@@ -379,6 +380,13 @@ class Neo4jConnectionPool(BaseConnectionPool[Neo4jConnection]):
             "driver_kwargs": config.settings.get("driver_kwargs", {}),
         }
 
+        # Store config before calling parent init (parent may call _create_connection)
+        self._config = conn_config
+        self._health_check_interval = health_check_interval
+        self._last_health_check = 0.0
+        self._last_health_status: Dict[str, Any] = {}
+        self._default_database = config.settings.get("database")
+
         super().__init__(
             name=name,
             connection_class=Neo4jConnection,
@@ -386,13 +394,10 @@ class Neo4jConnectionPool(BaseConnectionPool[Neo4jConnection]):
             max_size=max_size,
             max_idle_time=max_idle_time,
             max_lifetime=max_lifetime,
+            wait_timeout=wait_timeout,
+            health_check_interval=health_check_interval,
+            enable_dynamic_resize=enable_dynamic_resize,
         )
-
-        self._config = conn_config
-        self._health_check_interval = health_check_interval
-        self._last_health_check = 0.0
-        self._last_health_status: Dict[str, Any] = {}
-        self._default_database = config.settings.get("database")
 
     def get_pool_type(self) -> str:
         """Get pool type identifier."""
@@ -417,8 +422,7 @@ class Neo4jConnectionPool(BaseConnectionPool[Neo4jConnection]):
         except Exception as e:
             raise PoolError(
                 f"Failed to create Neo4j connection: {str(e)}",
-                pool_name=self._name,
-                original_error=e,
+                details={"pool_name": self._name, "original_error": str(e)}
             )
 
     def _validate_connection(self, connection: Neo4jConnection) -> bool:

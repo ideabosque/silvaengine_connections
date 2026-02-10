@@ -7,7 +7,7 @@ Asynchronous/synchronous HTTP client connection pool implementation based on HTT
 import logging
 import time
 from contextlib import contextmanager
-from typing import Any, CoroutineType, Dict, Iterator, Optional, TypeVar, Union
+from typing import Any, Coroutine, Dict, Iterator, Optional, TypeVar, Union
 
 import httpx
 from httpx import AsyncClient, Client, Response, Timeout
@@ -169,8 +169,7 @@ class HTTPXConnection(BaseConnection[Union[Client, AsyncClient]]):
         except Exception as e:
             raise ConnectionError(
                 f"HTTPX client creation failed: {str(e)}",
-                connection_type="httpx",
-                original_error=e,
+                details={"connection_type": "httpx", "original_error": str(e)},
             )
 
     def close(self) -> None:
@@ -283,7 +282,7 @@ class HTTPXConnection(BaseConnection[Union[Client, AsyncClient]]):
 
     def request(
         self, method: str, url: str, **kwargs
-    ) -> CoroutineType[Any, Any, Response]:
+    ) -> Coroutine[Any, Any, Response]:
         """
         Send HTTP Request
 
@@ -300,13 +299,13 @@ class HTTPXConnection(BaseConnection[Union[Client, AsyncClient]]):
         """
         if not self._client or self._is_closed:
             raise ConnectionError(
-                "HTTPX client not created or already closed", connection_type="httpx"
+                "HTTPX client not created or already closed", details={"connection_type": "httpx"}
             )
 
         if self._async_mode:
             raise ConnectionError(
                 "Please use async request methods in async mode",
-                connection_type="httpx",
+                details={"connection_type": "httpx"},
             )
 
         try:
@@ -321,8 +320,7 @@ class HTTPXConnection(BaseConnection[Union[Client, AsyncClient]]):
         except Exception as e:
             raise ConnectionError(
                 f"HTTP request failed: {str(e)}",
-                connection_type="httpx",
-                original_error=e,
+                details={"connection_type": "httpx", "original_error": str(e)},
             )
 
     async def arequest(self, method: str, url: str, **kwargs) -> Response:
@@ -339,12 +337,12 @@ class HTTPXConnection(BaseConnection[Union[Client, AsyncClient]]):
         """
         if not self._client or self._is_closed:
             raise ConnectionError(
-                "HTTPX client not created or already closed", connection_type="httpx"
+                "HTTPX client not created or already closed", details={"connection_type": "httpx"}
             )
 
         if not self._async_mode:
             raise ConnectionError(
-                "Please use sync request methods in sync mode", connection_type="httpx"
+                "Please use sync request methods in sync mode", details={"connection_type": "httpx"}
             )
 
         try:
@@ -359,8 +357,7 @@ class HTTPXConnection(BaseConnection[Union[Client, AsyncClient]]):
         except Exception as e:
             raise ConnectionError(
                 f"HTTP request failed: {str(e)}",
-                connection_type="httpx",
-                original_error=e,
+                details={"connection_type": "httpx", "original_error": str(e)},
             )
 
     async def aget(self, url: str, **kwargs) -> Response:
@@ -490,8 +487,7 @@ class HTTPXConnectionPool(BaseConnectionPool[HTTPXConnection]):
         except Exception as e:
             raise PoolError(
                 f"Failed to create HTTPX connection: {str(e)}",
-                pool_name=self._name,
-                original_error=e,
+                details={"pool_name": self._name, "original_error": str(e)}
             )
 
     def _validate_connection(self, connection: HTTPXConnection) -> bool:

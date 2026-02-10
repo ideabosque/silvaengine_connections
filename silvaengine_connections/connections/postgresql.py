@@ -139,8 +139,7 @@ class PostgreSQLConnection(BaseConnection[Engine]):
         except SQLAlchemyError as e:
             raise ConnectionError(
                 f"PostgreSQL connection failed: {str(e)}",
-                connection_type="postgresql",
-                original_error=e
+                details={"connection_type": "postgresql", "original_error": str(e)}
             )
 
     def close(self) -> None:
@@ -189,7 +188,7 @@ class PostgreSQLConnection(BaseConnection[Engine]):
         if not self._engine or self._is_closed:
             raise ConnectionError(
                 "Connection not established or already closed",
-                connection_type="postgresql"
+                details={"connection_type": "postgresql"}
             )
 
         try:
@@ -200,8 +199,7 @@ class PostgreSQLConnection(BaseConnection[Engine]):
         except SQLAlchemyError as e:
             raise ConnectionError(
                 f"SQL execution failed: {str(e)}",
-                connection_type="postgresql",
-                original_error=e
+                details={"connection_type": "postgresql", "original_error": str(e)}
             )
 
     def begin_transaction(self) -> Any:
@@ -214,7 +212,7 @@ class PostgreSQLConnection(BaseConnection[Engine]):
         if not self._engine:
             raise ConnectionError(
                 "Connection not established",
-                connection_type="postgresql"
+                details={"connection_type": "postgresql"}
             )
         return self._engine.begin()
 
@@ -252,7 +250,9 @@ class PostgreSQLConnectionPool(BaseConnectionPool[PostgreSQLConnection]):
         max_size: int = 10,
         max_idle_time: float = 300.0,
         max_lifetime: float = 3600.0,
-        health_check_interval: float = 60.0
+        wait_timeout: float = 10.0,
+        health_check_interval: float = 60.0,
+        enable_dynamic_resize: bool = True,
     ) -> None:
         """
         Initialize PostgreSQL Connection Pool
@@ -264,7 +264,9 @@ class PostgreSQLConnectionPool(BaseConnectionPool[PostgreSQLConnection]):
             max_size: Maximum number of connections
             max_idle_time: Maximum idle time (seconds)
             max_lifetime: Maximum connection lifetime (seconds)
+            wait_timeout: Connection acquisition timeout (seconds)
             health_check_interval: Health check interval (seconds)
+            enable_dynamic_resize: Whether to enable dynamic pool resizing
         """
         # Build connection configuration dictionary
         conn_config = {
@@ -278,19 +280,23 @@ class PostgreSQLConnectionPool(BaseConnectionPool[PostgreSQLConnection]):
             'pool': config.pool_settings,
         }
 
+        # Store config before calling parent init (parent may call _create_connection)
+        self._config = conn_config
+        self._health_check_interval = health_check_interval
+        self._last_health_check = 0.0
+        self._last_health_status: Dict[str, Any] = {}
+
         super().__init__(
             name=name,
             connection_class=PostgreSQLConnection,
             min_size=min_size,
             max_size=max_size,
             max_idle_time=max_idle_time,
-            max_lifetime=max_lifetime
+            max_lifetime=max_lifetime,
+            wait_timeout=wait_timeout,
+            health_check_interval=health_check_interval,
+            enable_dynamic_resize=enable_dynamic_resize,
         )
-
-        self._config = conn_config
-        self._health_check_interval = health_check_interval
-        self._last_health_check = 0.0
-        self._last_health_status: Dict[str, Any] = {}
 
     def get_pool_type(self) -> str:
         """Get pool type identifier."""
@@ -315,8 +321,7 @@ class PostgreSQLConnectionPool(BaseConnectionPool[PostgreSQLConnection]):
         except Exception as e:
             raise PoolError(
                 f"Failed to create PostgreSQL connection: {str(e)}",
-                pool_name=self._name,
-                original_error=e
+                details={"pool_name": self._name, "original_error": str(e)}
             )
 
     def _validate_connection(self, connection: PostgreSQLConnection) -> bool:

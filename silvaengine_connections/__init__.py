@@ -48,6 +48,22 @@ from .pool_manager import ConnectionPoolManager
 from .plugin_registry import PluginRegistry, ConnectionPlugin
 from .config import ConnectionConfig, ConfigManager
 
+# Lifecycle management
+from .lifecycle import (
+    ConnectionLifecycleManager,
+    ConnectionPoolLifecycleManager,
+    ConnectionLifecycleContext,
+    ConnectionLifecycleEvent,
+    ConnectionState,
+)
+
+# Plugin integration
+from .integration import (
+    ConnectionPluginIntegration,
+    ConnectionPluginInitializer,
+    create_connection_plugin_initializer,
+)
+
 # Exceptions
 from .exceptions import (
     ConnectionError,
@@ -196,19 +212,90 @@ def init(config: Dict[str, Any]) -> ConnectionPoolManager:
             if isinstance(pool_config, dict) and name not in reserved_keys
         }
 
-    # Process pool configurations
+    # Process pool configurations and collect connection types to register
     processed_config = {}
+    connection_types_to_register = set()
     for name, pool_config in pools_config.items():
         if isinstance(pool_config, dict):
             # Ensure type is set if not present
             if "type" not in pool_config:
                 pool_config = {**pool_config, "type": name}
             processed_config[name] = pool_config
+            # Collect connection type for registration
+            connection_types_to_register.add(pool_config.get("type"))
+
+    # Register default connection types before creating pools
+    _register_default_connection_types(manager, connection_types_to_register)
 
     if processed_config:
         manager.create_pools_from_config(processed_config)
 
     return manager
+
+
+def _register_default_connection_types(
+    manager: ConnectionPoolManager,
+    types_to_register: set
+) -> None:
+    """
+    Register default connection types for the given type names.
+
+    Args:
+        manager: ConnectionPoolManager instance
+        types_to_register: Set of connection type names to register
+    """
+    # Map of connection type names to their class paths
+    CONNECTION_TYPE_MAP = {
+        "postgresql": (
+            "silvaengine_connections.connections.postgresql.PostgreSQLConnectionPool",
+            "silvaengine_connections.connections.postgresql.PostgreSQLConnection",
+        ),
+        "neo4j": (
+            "silvaengine_connections.connections.neo4j.Neo4jConnectionPool",
+            "silvaengine_connections.connections.neo4j.Neo4jConnection",
+        ),
+        "httpx": (
+            "silvaengine_connections.connections.httpx.HTTPXConnectionPool",
+            "silvaengine_connections.connections.httpx.HTTPXConnection",
+        ),
+        "boto3": (
+            "silvaengine_connections.connections.boto3.Boto3ConnectionPool",
+            "silvaengine_connections.connections.boto3.Boto3Connection",
+        ),
+    }
+
+    for type_name in types_to_register:
+        if type_name not in CONNECTION_TYPE_MAP:
+            continue
+
+        try:
+            pool_path, conn_path = CONNECTION_TYPE_MAP[type_name]
+            pool_class = _import_class(pool_path)
+            conn_class = _import_class(conn_path)
+
+            if pool_class and conn_class:
+                manager.register_connection_type(type_name, pool_class, conn_class)
+        except Exception:
+            # Ignore registration errors (e.g., missing dependencies)
+            pass
+
+
+def _import_class(class_path: str):
+    """
+    Import a class from its full path.
+
+    Args:
+        class_path: Full class path (e.g., 'module.submodule.ClassName').
+
+    Returns:
+        Imported class or None if import fails.
+    """
+    try:
+        module_path, class_name = class_path.rsplit(".", 1)
+        module = __import__(module_path, fromlist=[class_name])
+        return getattr(module, class_name)
+    except (ImportError, AttributeError):
+        return None
 
 
 __all__ = [
@@ -223,6 +310,18 @@ __all__ = [
     "ConfigManager",
     "PoolMetrics",
     "PoolStatus",
+
+    # Lifecycle management
+    "ConnectionLifecycleManager",
+    "ConnectionPoolLifecycleManager",
+    "ConnectionLifecycleContext",
+    "ConnectionLifecycleEvent",
+    "ConnectionState",
+
+    # Plugin integration
+    "ConnectionPluginIntegration",
+    "ConnectionPluginInitializer",
+    "create_connection_plugin_initializer",
 
     # Functions
     "init",

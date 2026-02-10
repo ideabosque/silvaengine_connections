@@ -326,6 +326,10 @@ class ConnectionPoolManager:
         created = []
 
         for pool_name, pool_config in pools_config.items():
+            print(">" * 80)
+            print(f"Location: {__file__}\n")
+            print(f"Pool Name: {pool_name}, Config: {pool_config}")
+            print("<" * 80)
             try:
                 if not pool_config.get("enabled", True):
                     self._logger.debug(f"Pool {pool_name} is disabled, skipping")
@@ -337,7 +341,10 @@ class ConnectionPoolManager:
                 # Create connection pool
                 self.create_pool(pool_name, config)
                 created.append(pool_name)
-                self._logger.info(f"Created connection pool: {pool_name} (type: {config.type})")
+
+                self._logger.info(
+                    f"Created connection pool: {pool_name} (type: {config.type})"
+                )
 
             except Exception as e:
                 self._logger.error(f"Failed to create pool {pool_name}: {e}")
@@ -345,9 +352,7 @@ class ConnectionPoolManager:
         return created
 
     def reload_configuration(
-        self,
-        config: Dict[str, Any],
-        plugin_registry: Optional[Dict[str, Any]] = None
+        self, config: Dict[str, Any], plugin_registry: Optional[Dict[str, Any]] = None
     ) -> bool:
         """
         Hot reload configuration.
@@ -377,7 +382,9 @@ class ConnectionPoolManager:
                         register_func(self._plugin_registry)
                         self._logger.debug(f"Registered plugin: {plugin_name}")
                     except Exception as e:
-                        self._logger.warning(f"Failed to register plugin {plugin_name}: {e}")
+                        self._logger.warning(
+                            f"Failed to register plugin {plugin_name}: {e}"
+                        )
 
             # Create pools from new configuration
             if config and config.get("enabled", True):

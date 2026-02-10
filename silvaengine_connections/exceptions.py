@@ -33,8 +33,11 @@ class ConnectionTimeoutError(ConnectionError):
     
     ERROR_CODE = "CONN_TIMEOUT"
     
-    def __init__(self, message: str = "Connection timeout", timeout: Optional[float] = None, **kwargs):
-        super().__init__(message, self.ERROR_CODE, {"timeout": timeout, **kwargs})
+    def __init__(self, message: str = "Connection timeout", timeout: Optional[float] = None, connection_type: Optional[str] = None, **kwargs):
+        details = {"timeout": timeout, **kwargs}
+        if connection_type:
+            details["connection_type"] = connection_type
+        super().__init__(message, self.ERROR_CODE, details)
 
 
 class ConnectionFailedError(ConnectionError):
@@ -42,8 +45,11 @@ class ConnectionFailedError(ConnectionError):
     
     ERROR_CODE = "CONN_FAILED"
     
-    def __init__(self, message: str = "Connection failed", host: Optional[str] = None, **kwargs):
-        super().__init__(message, self.ERROR_CODE, {"host": host, **kwargs})
+    def __init__(self, message: str = "Connection failed", host: Optional[str] = None, connection_type: Optional[str] = None, **kwargs):
+        details = {"host": host, **kwargs}
+        if connection_type:
+            details["connection_type"] = connection_type
+        super().__init__(message, self.ERROR_CODE, details)
 
 
 class AuthenticationError(ConnectionError):
@@ -51,8 +57,11 @@ class AuthenticationError(ConnectionError):
     
     ERROR_CODE = "AUTH_FAILED"
     
-    def __init__(self, message: str = "Authentication failed", **kwargs):
-        super().__init__(message, self.ERROR_CODE, kwargs)
+    def __init__(self, message: str = "Authentication failed", connection_type: Optional[str] = None, **kwargs):
+        details = dict(kwargs)
+        if connection_type:
+            details["connection_type"] = connection_type
+        super().__init__(message, self.ERROR_CODE, details)
 
 
 class ConnectionNotFoundError(ConnectionError):
@@ -60,8 +69,11 @@ class ConnectionNotFoundError(ConnectionError):
     
     ERROR_CODE = "CONN_NOT_FOUND"
     
-    def __init__(self, message: str = "Connection not found", conn_id: Optional[int] = None, **kwargs):
-        super().__init__(message, self.ERROR_CODE, {"conn_id": conn_id, **kwargs})
+    def __init__(self, message: str = "Connection not found", conn_id: Optional[int] = None, connection_type: Optional[str] = None, **kwargs):
+        details = {"conn_id": conn_id, **kwargs}
+        if connection_type:
+            details["connection_type"] = connection_type
+        super().__init__(message, self.ERROR_CODE, details)
 
 
 class ConnectionClosedError(ConnectionError):
@@ -69,8 +81,11 @@ class ConnectionClosedError(ConnectionError):
     
     ERROR_CODE = "CONN_CLOSED"
     
-    def __init__(self, message: str = "Connection is closed", conn_id: Optional[int] = None, **kwargs):
-        super().__init__(message, self.ERROR_CODE, {"conn_id": conn_id, **kwargs})
+    def __init__(self, message: str = "Connection is closed", conn_id: Optional[int] = None, connection_type: Optional[str] = None, **kwargs):
+        details = {"conn_id": conn_id, **kwargs}
+        if connection_type:
+            details["connection_type"] = connection_type
+        super().__init__(message, self.ERROR_CODE, details)
 
 
 class PoolError(Exception):

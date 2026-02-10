@@ -186,8 +186,7 @@ class Boto3Connection(BaseConnection[BaseClient]):
         except EndpointConnectionError as e:
             raise ConnectionError(
                 f"AWS service endpoint connection failed: {str(e)}",
-                connection_type="boto3",
-                original_error=e,
+                details={"connection_type": "boto3", "original_error": str(e)},
             )
         except (ConnectTimeoutError, ReadTimeoutError) as e:
             raise ConnectionTimeoutError(
@@ -197,7 +196,7 @@ class Boto3Connection(BaseConnection[BaseClient]):
             )
         except ClientError as e:
             raise ConnectionError(
-                f"AWS client error: {str(e)}", connection_type="boto3", original_error=e
+                f"AWS client error: {str(e)}", details={"connection_type": "boto3", "original_error": str(e)}
             )
 
     def close(self) -> None:
@@ -269,7 +268,7 @@ class Boto3Connection(BaseConnection[BaseClient]):
         """
         if not self._client or self._is_closed:
             raise ConnectionError(
-                "Boto3 client not created or already closed", connection_type="boto3"
+                "Boto3 client not created or already closed", details={"connection_type": "boto3"}
             )
 
         try:
@@ -277,7 +276,7 @@ class Boto3Connection(BaseConnection[BaseClient]):
 
             if not method:
                 raise ConnectionError(
-                    f"Operation does not exist: {operation}", connection_type="boto3"
+                    f"Operation does not exist: {operation}", details={"connection_type": "boto3"}
                 )
 
             response = method(**kwargs)
@@ -296,14 +295,12 @@ class Boto3Connection(BaseConnection[BaseClient]):
 
             raise ConnectionError(
                 f"AWS operation failed [{error_code}]: {error_message}",
-                connection_type="boto3",
-                original_error=e,
+                details={"connection_type": "boto3", "original_error": str(e)},
             )
         except Exception as e:
             raise ConnectionError(
                 f"AWS operation call failed: {str(e)}",
-                connection_type="boto3",
-                original_error=e,
+                details={"connection_type": "boto3", "original_error": str(e)},
             )
 
     @property
@@ -413,8 +410,7 @@ class Boto3ConnectionPool(BaseConnectionPool[Boto3Connection]):
         except Exception as e:
             raise PoolError(
                 f"Failed to create Boto3 connection: {str(e)}",
-                pool_name=self._name,
-                original_error=e,
+                details={"pool_name": self._name, "original_error": str(e)}
             )
 
     def _validate_connection(self, connection: Boto3Connection) -> bool:

@@ -123,6 +123,7 @@ class PluginRegistry:
             PluginNotFoundError: If type is not registered
         """
         plugin = self.get(type_name)
+        
         if plugin is None:
             raise PluginNotFoundError(
                 f"Connection type '{type_name}' is not registered",
