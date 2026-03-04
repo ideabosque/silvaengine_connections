@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Generic, Iterator, List, Optional, Type, TypeVar
 
+from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
 from .connection import BaseConnection
 from .exceptions import PoolError, PoolExhaustedError, PoolNotReadyError
 
@@ -46,6 +47,10 @@ class PoolMetrics:
     wait_time_max: float = 0.0
     health_check_failures: int = 0
     last_health_check: Optional[float] = None
+    connection_usage_rate: float = 0.0
+    wait_queue_length: int = 0
+    avg_response_time: float = 0.0
+    error_rate: float = 0.0
 
 
 class BaseConnectionPool(ABC, Generic[C]):
@@ -89,6 +94,7 @@ class BaseConnectionPool(ABC, Generic[C]):
         wait_timeout: float = 10.0,
         health_check_interval: float = 30.0,
         enable_dynamic_resize: bool = True,
+        circuit_breaker_config: Optional[CircuitBreakerConfig] = None,
     ) -> None:
         """
         Initialize the connection pool.
@@ -103,6 +109,7 @@ class BaseConnectionPool(ABC, Generic[C]):
             wait_timeout: Connection acquisition timeout in seconds
             health_check_interval: Health check interval in seconds
             enable_dynamic_resize: Whether to enable dynamic resizing
+            circuit_breaker_config: Circuit breaker configuration
         """
         self._name = name
         self._connection_class = connection_class
@@ -113,11 +120,19 @@ class BaseConnectionPool(ABC, Generic[C]):
         self._wait_timeout = wait_timeout
         self._health_check_interval = health_check_interval
         self._enable_dynamic_resize = enable_dynamic_resize
+        self._circuit_breaker_config = circuit_breaker_config
 
         self._status = PoolStatus.INITIALIZING
         self._metrics = PoolMetrics()
         self._lock = threading.RLock()
         self._logger = logging.getLogger(f"{__name__}.{name}")
+
+        if circuit_breaker_config is not None:
+            self._circuit_breaker = CircuitBreaker(
+                f"{name}_breaker", circuit_breaker_config
+            )
+        else:
+            self._circuit_breaker = None
 
         # Connection storage
         self._idle_connections: queue.Queue[C] = queue.Queue(maxsize=max_size)
@@ -140,6 +155,16 @@ class BaseConnectionPool(ABC, Generic[C]):
         """Get pool metrics (returns a copy)."""
         with self._lock:
             return PoolMetrics(**self._metrics.__dict__)
+
+    @property
+    def circuit_breaker(self) -> Optional["CircuitBreaker"]:
+        """Get circuit breaker instance."""
+        return self._circuit_breaker
+
+    def reset_circuit_breaker(self) -> None:
+        """Reset the circuit breaker to closed state."""
+        if self._circuit_breaker is not None:
+            self._circuit_breaker.reset()
 
     @abstractmethod
     def get_pool_type(self) -> str:
@@ -225,7 +250,10 @@ class BaseConnectionPool(ABC, Generic[C]):
 
             if total_connections < self._max_size:
                 try:
-                    connection = self._create_connection()
+                    if self._circuit_breaker is not None:
+                        connection = self._circuit_breaker.call(self._create_connection)
+                    else:
+                        connection = self._create_connection()
                     connection.is_used = True
                     self._active_connections[connection.connection_id] = connection
                     self._metrics.total_created += 1
@@ -299,7 +327,10 @@ class BaseConnectionPool(ABC, Generic[C]):
 
                 if total_connections < self._max_size:
                     try:
-                        connection = self._create_connection()
+                        if self._circuit_breaker is not None:
+                            connection = self._circuit_breaker.call(self._create_connection)
+                        else:
+                            connection = self._create_connection()
                         connection.is_used = True
                         self._active_connections[connection.connection_id] = connection
                         self._metrics.total_created += 1
@@ -449,7 +480,10 @@ class BaseConnectionPool(ABC, Generic[C]):
             if current_total < self._min_size:
                 for _ in range(self._min_size - current_total):
                     try:
-                        connection = self._create_connection()
+                        if self._circuit_breaker is not None:
+                            connection = self._circuit_breaker.call(self._create_connection)
+                        else:
+                            connection = self._create_connection()
                         self._idle_connections.put(connection)
                         self._metrics.total_created += 1
                         self._metrics.idle_connections += 1

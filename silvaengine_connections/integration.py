@@ -158,17 +158,17 @@ class ConnectionPluginIntegration:
 
     def _register_default_connection_types(self) -> None:
         """Register default connection types."""
-        for type_name, (pool_path, conn_path) in self.DEFAULT_CONNECTION_TYPES.items():
+        for type_name, (pool_path, connection_path) in self.DEFAULT_CONNECTION_TYPES.items():
             try:
                 pool_class = self._import_class(pool_path)
-                conn_class = self._import_class(conn_path)
+                connection_class = self._import_class(connection_path)
 
-                if pool_class and conn_class:
+                if pool_class and connection_class:
                     self._lifecycle_manager.register_plugin(
-                        type_name, pool_class, conn_class
+                        type_name, pool_class, connection_class
                     )
                     self._pool_manager.register_connection_type(
-                        type_name, pool_class, conn_class
+                        type_name, pool_class, connection_class
                     )
                     self._logger.debug(f"Registered connection type: {type_name}")
             except Exception as e:

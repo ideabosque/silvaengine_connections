@@ -430,7 +430,7 @@ class HTTPXConnectionPool(BaseConnectionPool[HTTPXConnection]):
             health_check_url: Health check URL
         """
         # Build connection configuration dictionary
-        conn_config = {
+        connection_configuration = {
             "base_url": config.settings.get("base_url", ""),
             "async_mode": config.settings.get("async_mode", False),
             "timeout": config.settings.get("timeout", 30.0),
@@ -455,7 +455,7 @@ class HTTPXConnectionPool(BaseConnectionPool[HTTPXConnection]):
             max_lifetime=max_lifetime,
         )
 
-        self._config = conn_config
+        self._config = connection_configuration
         self._health_check_interval = health_check_interval
         self._last_health_check = 0.0
         self._last_health_status: Dict[str, Any] = {}
@@ -536,14 +536,14 @@ class HTTPXConnectionPool(BaseConnectionPool[HTTPXConnection]):
                     unhealthy_count += 1
 
             # Check idle connections
-            idle_conns = []
+            idle_connections_list = []
 
             while not self._idle_connections.empty():
                 try:
                     connection = self._idle_connections.get_nowait()
                     
                     if connection.is_healthy():
-                        idle_conns.append(connection)
+                        idle_connections_list.append(connection)
                     else:
                         unhealthy_count += 1
                         self._destroy_connection(connection)
@@ -551,7 +551,7 @@ class HTTPXConnectionPool(BaseConnectionPool[HTTPXConnection]):
                     break
 
             # Put healthy connections back into the queue
-            for connection in idle_conns:
+            for connection in idle_connections_list:
                 try:
                     self._idle_connections.put_nowait(connection)
                 except Exception:

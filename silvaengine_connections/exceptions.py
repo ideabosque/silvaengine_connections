@@ -69,8 +69,8 @@ class ConnectionNotFoundError(ConnectionError):
     
     ERROR_CODE = "CONN_NOT_FOUND"
     
-    def __init__(self, message: str = "Connection not found", conn_id: Optional[int] = None, connection_type: Optional[str] = None, **kwargs):
-        details = {"conn_id": conn_id, **kwargs}
+    def __init__(self, message: str = "Connection not found", connection_id: Optional[int] = None, connection_type: Optional[str] = None, **kwargs):
+        details = {"connection_id": connection_id, **kwargs}
         if connection_type:
             details["connection_type"] = connection_type
         super().__init__(message, self.ERROR_CODE, details)
@@ -81,8 +81,8 @@ class ConnectionClosedError(ConnectionError):
     
     ERROR_CODE = "CONN_CLOSED"
     
-    def __init__(self, message: str = "Connection is closed", conn_id: Optional[int] = None, connection_type: Optional[str] = None, **kwargs):
-        details = {"conn_id": conn_id, **kwargs}
+    def __init__(self, message: str = "Connection is closed", connection_id: Optional[int] = None, connection_type: Optional[str] = None, **kwargs):
+        details = {"connection_id": connection_id, **kwargs}
         if connection_type:
             details["connection_type"] = connection_type
         super().__init__(message, self.ERROR_CODE, details)

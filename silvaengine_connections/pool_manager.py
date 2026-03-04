@@ -15,9 +15,7 @@ from .config import ConfigManager, ConnectionConfig
 from .connection import BaseConnection
 from .connection_pool import BaseConnectionPool
 from .exceptions import (
-    PluginNotFoundError,
     PoolAlreadyExistsError,
-    PoolManagerError,
     PoolNotFoundError,
 )
 from .plugin_registry import PluginRegistry
@@ -326,10 +324,6 @@ class ConnectionPoolManager:
         created = []
 
         for pool_name, pool_config in pools_config.items():
-            print(">" * 80)
-            print(f"Location: {__file__}\n")
-            print(f"Pool Name: {pool_name}, Config: {pool_config}")
-            print("<" * 80)
             try:
                 if not pool_config.get("enabled", True):
                     self._logger.debug(f"Pool {pool_name} is disabled, skipping")

@@ -361,7 +361,7 @@ class Neo4jConnectionPool(BaseConnectionPool[Neo4jConnection]):
             enable_dynamic_resize: Whether to enable dynamic pool resizing
         """
         # Build connection configuration dictionary
-        conn_config = {
+        connection_configuration = {
             "uri": config.settings.get("uri"),
             "host": config.settings.get("host"),
             "port": config.settings.get("port", 7687),
@@ -381,7 +381,7 @@ class Neo4jConnectionPool(BaseConnectionPool[Neo4jConnection]):
         }
 
         # Store config before calling parent init (parent may call _create_connection)
-        self._config = conn_config
+        self._config = connection_configuration
         self._health_check_interval = health_check_interval
         self._last_health_check = 0.0
         self._last_health_status: Dict[str, Any] = {}
@@ -466,18 +466,18 @@ class Neo4jConnectionPool(BaseConnectionPool[Neo4jConnection]):
             unhealthy_count = 0
 
             # Check active connections
-            for conn_id, connection in list(self._active_connections.items()):
+            for connection_identifier, connection in list(self._active_connections.items()):
                 if not connection.is_healthy():
                     unhealthy_count += 1
 
             # Check idle connections
-            idle_connection = []
+            idle_connections_list = []
 
             while not self._idle_connections.empty():
                 try:
                     connection = self._idle_connections.get_nowait()
                     if connection.is_healthy():
-                        idle_connection.append(connection)
+                        idle_connections_list.append(connection)
                     else:
                         unhealthy_count += 1
                         self._destroy_connection(connection)
@@ -485,7 +485,7 @@ class Neo4jConnectionPool(BaseConnectionPool[Neo4jConnection]):
                     break
 
             # Put healthy connections back into the queue
-            for connection in idle_connection:
+            for connection in idle_connections_list:
                 try:
                     self._idle_connections.put_nowait(connection)
                 except Exception:

@@ -46,7 +46,7 @@ from .connection import BaseConnection
 from .connection_pool import BaseConnectionPool, PoolMetrics, PoolStatus
 from .pool_manager import ConnectionPoolManager
 from .plugin_registry import PluginRegistry, ConnectionPlugin
-from .config import ConnectionConfig, ConfigManager
+from .config import ConnectionConfig, ConfigManager, VALID_CONNECTION_TYPES, RESERVED_POOL_NAMES
 
 # Lifecycle management
 from .lifecycle import (
@@ -62,6 +62,13 @@ from .integration import (
     ConnectionPluginIntegration,
     ConnectionPluginInitializer,
     create_connection_plugin_initializer,
+)
+
+# Circuit breaker
+from .circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitState,
 )
 
 # Exceptions
@@ -114,6 +121,20 @@ except ImportError:
 
 # Alias for backward compatibility with standard configuration format
 PoolManager = ConnectionPoolManager
+
+# Import validators
+from .connection_validator import (
+    BaseConnectionValidator,
+    ConnectionValidationResult,
+    ValidationLevel,
+    ValidationMessage,
+    PostgreSQLConnectionValidator,
+    Neo4jConnectionValidator,
+    HTTPXConnectionValidator,
+    Boto3ConnectionValidator,
+    get_validator_for_config,
+    validate_connection_config,
+)
 
 
 def init(config: Dict[str, Any]) -> ConnectionPoolManager:
@@ -269,12 +290,12 @@ def _register_default_connection_types(
             continue
 
         try:
-            pool_path, conn_path = CONNECTION_TYPE_MAP[type_name]
+            pool_path, connection_path = CONNECTION_TYPE_MAP[type_name]
             pool_class = _import_class(pool_path)
-            conn_class = _import_class(conn_path)
+            connection_class = _import_class(connection_path)
 
-            if pool_class and conn_class:
-                manager.register_connection_type(type_name, pool_class, conn_class)
+            if pool_class and connection_class:
+                manager.register_connection_type(type_name, pool_class, connection_class)
         except Exception:
             # Ignore registration errors (e.g., missing dependencies)
             pass
@@ -310,6 +331,8 @@ __all__ = [
     "ConfigManager",
     "PoolMetrics",
     "PoolStatus",
+    "VALID_CONNECTION_TYPES",
+    "RESERVED_POOL_NAMES",
 
     # Lifecycle management
     "ConnectionLifecycleManager",
@@ -322,6 +345,23 @@ __all__ = [
     "ConnectionPluginIntegration",
     "ConnectionPluginInitializer",
     "create_connection_plugin_initializer",
+
+    # Circuit breaker
+    "CircuitBreaker",
+    "CircuitBreakerConfig",
+    "CircuitState",
+
+    # Validators
+    "BaseConnectionValidator",
+    "ConnectionValidationResult",
+    "ValidationLevel",
+    "ValidationMessage",
+    "PostgreSQLConnectionValidator",
+    "Neo4jConnectionValidator",
+    "HTTPXConnectionValidator",
+    "Boto3ConnectionValidator",
+    "get_validator_for_config",
+    "validate_connection_config",
 
     # Functions
     "init",

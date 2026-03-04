@@ -356,7 +356,7 @@ class Boto3ConnectionPool(BaseConnectionPool[Boto3Connection]):
             health_check_interval: Health check interval (seconds)
         """
         # Build connection configuration dictionary
-        conn_config = {
+        connection_configuration = {
             "service_name": config.settings.get("service_name"),
             "region_name": config.settings.get("region_name", "us-east-1"),
             "aws_access_key_id": config.settings.get("aws_access_key_id"),
@@ -381,7 +381,7 @@ class Boto3ConnectionPool(BaseConnectionPool[Boto3Connection]):
             max_lifetime=max_lifetime,
         )
 
-        self._config = conn_config
+        self._config = connection_configuration
         self._health_check_interval = health_check_interval
         self._last_health_check = 0.0
         self._last_health_status: Dict[str, Any] = {}
@@ -454,18 +454,19 @@ class Boto3ConnectionPool(BaseConnectionPool[Boto3Connection]):
             unhealthy_count = 0
 
             # Check active connections
-            for conn_id, connection in list(self._active_connections.items()):
+            for connection_identifier, connection in list(self._active_connections.items()):
                 if not connection.is_healthy():
                     unhealthy_count += 1
 
             # Check idle connections
-            idle_conns = []
+            idle_connections_list = []
+
             while not self._idle_connections.empty():
                 try:
                     connection = self._idle_connections.get_nowait()
 
                     if connection.is_healthy():
-                        idle_conns.append(connection)
+                        idle_connections_list.append(connection)
                     else:
                         unhealthy_count += 1
                         self._destroy_connection(connection)
@@ -473,7 +474,7 @@ class Boto3ConnectionPool(BaseConnectionPool[Boto3Connection]):
                     break
 
             # Put healthy connections back into the queue
-            for connection in idle_conns:
+            for connection in idle_connections_list:
                 try:
                     self._idle_connections.put_nowait(connection)
                 except Exception:
