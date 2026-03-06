@@ -4,7 +4,9 @@ Neo4j Connection Pool Implementation
 Neo4j graph database connection pool implementation based on neo4j-python-driver, supporting hot-plugging.
 """
 
+import atexit
 import logging
+import sys
 import time
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional, TypeVar
@@ -76,11 +78,17 @@ class Neo4jConnection(BaseConnection[Driver]):
         Raises:
             ConfigValidationError: When required configuration is missing
         """
-        # Prioritize directly provided uri
         if "uri" in self._config:
-            return self._config["uri"]
+            uri = self._config["uri"]
+            if uri.startswith(("bolt://", "neo4j://")):
+                parts = uri.split("//")
+                if len(parts) == 2:
+                    host_part = parts[1].split("/")[0]
+                    if ":" not in host_part:
+                        port = self._config.get("port", 7687)
+                        uri = f"{parts[0]}//{parts[1]}:{port}"
+            return uri
 
-        # Otherwise build from host and port
         host = self._config.get("host")
         port = self._config.get("port", 7687)
         scheme = self._config.get("scheme", "bolt")
@@ -127,9 +135,15 @@ class Neo4jConnection(BaseConnection[Driver]):
         if "encrypted" in self._config:
             config["encrypted"] = self._config["encrypted"]
 
-        # Trust policy
-        if "trust" in self._config:
-            config["trust"] = self._config["trust"]
+        # Trust policy - only include if explicitly provided as valid Trust enum
+        trust = self._config.get("trust")
+        if trust is not None:
+            try:
+                from neo4j import Trust
+                if isinstance(trust, Trust):
+                    config["trust"] = trust
+            except ImportError:
+                pass
 
         # Connection timeout
         if "connection_timeout" in self._config:
@@ -141,15 +155,10 @@ class Neo4jConnection(BaseConnection[Driver]):
         if "max_connection_lifetime" in self._config:
             config["max_connection_lifetime"] = self._config["max_connection_lifetime"]
 
-        # Connection pool settings
+        # Connection pool settings - only include valid Neo4j driver parameters
         if "max_connection_pool_size" in self._config:
             config["max_connection_pool_size"] = self._config[
                 "max_connection_pool_size"
-            ]
-
-        if "connection_pool_min_size" in self._config:
-            config["connection_pool_min_size"] = self._config[
-                "connection_pool_min_size"
             ]
 
         # Other driver parameters
@@ -209,10 +218,13 @@ class Neo4jConnection(BaseConnection[Driver]):
                 self._driver.close()
                 self._is_closed = True
                 logger.debug(f"Neo4j connection closed [connection_id={self._connection_id}]")
-            except Neo4jError as e:
-                logger.warning(
-                    f"Error closing Neo4j connection [connection_id={self._connection_id}]: {e}"
-                )
+            except Exception as e:
+                import sys
+                if sys.meta_path is not None:
+                    logger.warning(
+                        f"Error closing Neo4j connection [connection_id={self._connection_id}]: {e}"
+                    )
+                self._is_closed = True
 
     def is_healthy(self) -> bool:
         """
@@ -334,6 +346,30 @@ class Neo4jConnectionPool(BaseConnectionPool[Neo4jConnection]):
         _last_health_check: Last health check time
     """
 
+    _pools: List["Neo4jConnectionPool"] = []
+    _cleanup_registered: bool = False
+
+    @classmethod
+    def _register_cleanup(cls) -> None:
+        """Register atexit cleanup handler."""
+        if not cls._cleanup_registered:
+            atexit.register(cls._cleanup_all_pools)
+            cls._cleanup_registered = True
+
+    @classmethod
+    def _cleanup_all_pools(cls) -> None:
+        """Cleanup all Neo4j connection pools on Python exit."""
+        if sys.meta_path is None:
+            return
+
+        for pool in cls._pools:
+            try:
+                pool._shutdown_pool()
+            except Exception:
+                pass
+
+        cls._pools.clear()
+
     def __init__(
         self,
         name: str,
@@ -369,14 +405,12 @@ class Neo4jConnectionPool(BaseConnectionPool[Neo4jConnection]):
             "username": config.settings.get("username"),
             "password": config.settings.get("password"),
             "database": config.settings.get("database"),
-            "encrypted": config.settings.get("encrypted", True),
-            "trust": config.settings.get("trust"),
+            "encrypted": config.settings.get("encrypted", False),
             "connection_timeout": config.settings.get("connection_timeout", 30),
             "max_connection_lifetime": config.settings.get(
                 "max_connection_lifetime", 3600
             ),
             "max_connection_pool_size": max_size,
-            "connection_pool_min_size": min_size,
             "driver_kwargs": config.settings.get("driver_kwargs", {}),
         }
 
@@ -398,6 +432,31 @@ class Neo4jConnectionPool(BaseConnectionPool[Neo4jConnection]):
             health_check_interval=health_check_interval,
             enable_dynamic_resize=enable_dynamic_resize,
         )
+
+        self._register_cleanup()
+        self._pools.append(self)
+
+    def _shutdown_pool(self) -> None:
+        """Internal method to shutdown pool safely."""
+        try:
+            with self._lock:
+                while not self._idle_connections.empty():
+                    try:
+                        connection = self._idle_connections.get_nowait()
+                        self._destroy_connection(connection)
+                    except Exception:
+                        break
+
+                for connection in list(self._active_connections.values()):
+                    try:
+                        self._destroy_connection(connection)
+                    except Exception:
+                        pass
+
+                self._active_connections.clear()
+                self._status = PoolStatus.SHUTDOWN
+        except Exception:
+            pass
 
     def get_pool_type(self) -> str:
         """Get pool type identifier."""

@@ -413,8 +413,10 @@ class HTTPXConnectionPool(BaseConnectionPool[HTTPXConnection]):
         max_size: int = 10,
         max_idle_time: float = 300.0,
         max_lifetime: float = 3600.0,
+        wait_timeout: float = 10.0,
         health_check_interval: float = 60.0,
         health_check_url: Optional[str] = None,
+        **kwargs,
     ) -> None:
         """
         Initialize HTTPX Connection Pool
@@ -426,10 +428,11 @@ class HTTPXConnectionPool(BaseConnectionPool[HTTPXConnection]):
             max_size: Maximum number of connections
             max_idle_time: Maximum idle time (seconds)
             max_lifetime: Maximum connection lifetime (seconds)
+            wait_timeout: Connection acquisition timeout (seconds)
             health_check_interval: Health check interval (seconds)
             health_check_url: Health check URL
+            **kwargs: Additional keyword arguments (ignored for compatibility)
         """
-        # Build connection configuration dictionary
         connection_configuration = {
             "base_url": config.settings.get("base_url", ""),
             "async_mode": config.settings.get("async_mode", False),
@@ -446,15 +449,6 @@ class HTTPXConnectionPool(BaseConnectionPool[HTTPXConnection]):
             "follow_redirects": config.settings.get("follow_redirects", True),
         }
 
-        super().__init__(
-            name=name,
-            connection_class=HTTPXConnection,
-            min_size=min_size,
-            max_size=max_size,
-            max_idle_time=max_idle_time,
-            max_lifetime=max_lifetime,
-        )
-
         self._config = connection_configuration
         self._health_check_interval = health_check_interval
         self._last_health_check = 0.0
@@ -463,6 +457,16 @@ class HTTPXConnectionPool(BaseConnectionPool[HTTPXConnection]):
             "health_check_url"
         )
         self._async_mode = config.settings.get("async_mode", False)
+
+        super().__init__(
+            name=name,
+            connection_class=HTTPXConnection,
+            min_size=min_size,
+            max_size=max_size,
+            max_idle_time=max_idle_time,
+            max_lifetime=max_lifetime,
+            wait_timeout=wait_timeout,
+        )
 
     def get_pool_type(self) -> str:
         """Get pool type identifier."""
