@@ -88,6 +88,7 @@ class PostgreSQLConnection(BaseConnection[Engine]):
 
         # Add SSL parameters
         ssl_mode = self._config.get('ssl_mode')
+        
         if ssl_mode:
             url += f"?sslmode={ssl_mode}"
 
@@ -171,12 +172,12 @@ class PostgreSQLConnection(BaseConnection[Engine]):
         except SQLAlchemyError:
             return False
 
-    def execute(self, query: str, settings: Optional[Dict[str, Any]] = None) -> Any:
+    def execute(self, query: Any, settings: Optional[Dict[str, Any]] = None) -> Any:
         """
         Execute SQL Query
 
         Args:
-            query: SQL query statement
+            query: SQL query statement (string or SQLAlchemy TextClause)
             settings: Query parameters
 
         Returns:
@@ -193,7 +194,10 @@ class PostgreSQLConnection(BaseConnection[Engine]):
 
         try:
             with self._engine.connect() as connection:
-                result = connection.execute(text(query), settings or {})
+                # Handle both string and TextClause objects
+                if isinstance(query, str):
+                    query = text(query)
+                result = connection.execute(query, settings or {})
                 connection.commit()
                 return result
         except SQLAlchemyError as e:
@@ -227,6 +231,48 @@ class PostgreSQLConnection(BaseConnection[Engine]):
         if self._engine:
             return self._engine.raw_connection()
         return None
+
+    def cursor(self) -> Any:
+        """
+        Get a cursor object for executing SQL commands.
+
+        This method provides DB-API style cursor access for compatibility
+        with code that expects psycopg2-style cursor interface.
+
+        Returns:
+            Cursor object with execute(), fetchone(), fetchall() methods.
+
+        Raises:
+            ConnectionError: If connection is not established.
+
+        Example:
+            >>> with connection.cursor() as cursor:
+            ...     cursor.execute("SELECT * FROM users")
+            ...     results = cursor.fetchall()
+        """
+        if not self._engine or self._is_closed:
+            raise ConnectionError(
+                "Connection not established or already closed",
+                details={"connection_type": "postgresql"}
+            )
+
+        try:
+            # Get raw connection and return cursor
+            raw_conn = self._engine.raw_connection()
+            return raw_conn.cursor()
+        except SQLAlchemyError as e:
+            raise ConnectionError(
+                f"Failed to create cursor: {str(e)}",
+                details={"connection_type": "postgresql", "original_error": str(e)}
+            )
+
+    def __enter__(self) -> 'PostgreSQLConnection':
+        """Context manager entry - returns self for cursor access."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Context manager exit - closes the connection."""
+        self.close()
 
 
 class PostgreSQLConnectionPool(BaseConnectionPool[PostgreSQLConnection]):

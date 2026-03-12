@@ -76,12 +76,22 @@ class ConnectionPoolManager:
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialize(logger)
+                    instance = super().__new__(cls)
+                    instance._initialize(logger)
+                    cls._instance = instance
         return cls._instance
 
     def _initialize(self, logger: Optional[logging.Logger] = None) -> None:
-        """Initialize the manager instance."""
+        """
+        Initialize the manager instance.
+
+        This method is called once during singleton creation and sets up
+        all internal data structures and dependencies.
+
+        Args:
+            logger: Optional logger instance. If not provided, a default
+                logger for this module will be used.
+        """
         self._logger = logger or logging.getLogger(__name__)
         self._pools: Dict[str, BaseConnectionPool] = {}
         self._pool_locks: Dict[str, threading.RLock] = {}
@@ -93,7 +103,19 @@ class ConnectionPoolManager:
 
     @classmethod
     def get_instance(cls) -> "ConnectionPoolManager":
-        """Get manager instance."""
+        """
+        Get the singleton manager instance.
+
+        This is an alias for the constructor, provided for explicit
+        singleton access semantics.
+
+        Returns:
+            ConnectionPoolManager: The singleton manager instance.
+
+        Example:
+            >>> manager = ConnectionPoolManager.get_instance()
+            >>> pool = manager.get_pool("postgres_main")
+        """
         return cls()
 
     def register_connection_type(
@@ -105,10 +127,25 @@ class ConnectionPoolManager:
         """
         Register a new connection type (hot-pluggable).
 
+        This method allows dynamic registration of new connection types
+        at runtime without modifying the core codebase.
+
         Args:
-            type_name: Connection type name (e.g., 'postgresql', 'neo4j')
-            pool_class: Connection pool class
-            connection_class: Connection class
+            type_name: Connection type name (e.g., 'postgresql', 'neo4j').
+                Must be unique among registered types.
+            pool_class: Connection pool class that inherits from BaseConnectionPool.
+            connection_class: Connection class that inherits from BaseConnection.
+
+        Raises:
+            PluginAlreadyExistsError: If a connection type with the same
+                name is already registered.
+
+        Example:
+            >>> manager.register_connection_type(
+            ...     "postgresql",
+            ...     PostgreSQLPool,
+            ...     PostgreSQLConnection
+            ... )
         """
         self._plugin_registry.register(type_name, pool_class, connection_class)
         self._logger.info(f"Registered connection type: {type_name}")
@@ -117,13 +154,21 @@ class ConnectionPoolManager:
         """
         Unregister a connection type.
 
+        This method removes a connection type registration and closes all
+        pools of that type. This is useful for cleanup or when replacing
+        a connection type implementation.
+
         Args:
-            type_name: Connection type name
+            type_name: Connection type name to unregister.
 
         Returns:
-            bool: True if unregistered
+            bool: True if the type was successfully unregistered,
+                False if the type was not found.
+
+        Example:
+            >>> success = manager.unregister_connection_type("postgresql")
+            >>> print(success)  # True or False
         """
-        # Close all pools of this type first
         pools_to_remove = [
             name
             for name, pool in self._pools.items()
@@ -147,12 +192,28 @@ class ConnectionPoolManager:
         """
         Create a connection pool from configuration.
 
+        This method creates a new connection pool with the specified name
+        and configuration. The pool type is determined by the config.type field.
+
         Args:
-            name: Pool name
-            config: Connection configuration
+            name: Unique pool name for identification.
+            config: Connection configuration object containing type, settings,
+                and pool parameters.
 
         Returns:
-            BaseConnectionPool: Created pool
+            BaseConnectionPool: The created pool instance.
+
+        Raises:
+            PoolAlreadyExistsError: If a pool with the same name already exists.
+            PluginNotFoundError: If the connection type is not registered.
+
+        Example:
+            >>> config = ConnectionConfig(
+            ...     type="postgresql",
+            ...     settings={"host": "localhost", "database": "mydb"},
+            ...     pool_settings={"min_size": 2, "max_size": 10}
+            ... )
+            >>> pool = manager.create_pool("postgres_main", config)
         """
         with self._manager_lock:
             if name in self._pools:
@@ -160,13 +221,8 @@ class ConnectionPoolManager:
                     f"Pool '{name}' already exists", pool_name=name
                 )
 
-            # Get plugin
             plugin = self._plugin_registry.get_safe(config.type)
-
-            # Apply defaults
             config = self._config_manager.apply_defaults(config)
-
-            # Create pool - pass config object and pool settings
             pool = plugin.pool_class(
                 name=name,
                 config=config,
@@ -183,11 +239,19 @@ class ConnectionPoolManager:
         """
         Remove a connection pool.
 
+        This method closes the pool and removes it from the manager.
+        All connections in the pool will be properly closed.
+
         Args:
-            name: Pool name
+            name: Pool name to remove.
 
         Returns:
-            bool: True if removed
+            bool: True if the pool was successfully removed,
+                False if the pool was not found.
+
+        Example:
+            >>> success = manager.remove_pool("postgres_main")
+            >>> print(success)  # True or False
         """
         with self._manager_lock:
             if name not in self._pools:
@@ -207,10 +271,17 @@ class ConnectionPoolManager:
         Get a connection pool by name.
 
         Args:
-            name: Pool name
+            name: Pool name to retrieve.
 
         Returns:
-            Optional[BaseConnectionPool]: Pool or None
+            Optional[BaseConnectionPool]: The pool instance if found,
+                None otherwise.
+
+        Example:
+            >>> pool = manager.get_pool("postgres_main")
+            >>> if pool:
+            ...     with pool.connection() as conn:
+            ...         result = conn.execute("SELECT 1")
         """
         return self._pools.get(name)
 
@@ -218,33 +289,110 @@ class ConnectionPoolManager:
         """
         Get a connection pool, raising exception if not found.
 
+        This method is useful when the pool must exist and its absence
+        indicates a configuration or programming error.
+
         Args:
-            name: Pool name
+            name: Pool name to retrieve.
 
         Returns:
-            BaseConnectionPool: Pool
+            BaseConnectionPool: The pool instance.
 
         Raises:
-            PoolNotFoundError: If pool not found
+            PoolNotFoundError: If no pool with the given name exists.
+
+        Example:
+            >>> try:
+            ...     pool = manager.get_pool_safe("postgres_main")
+            ...     with pool.connection() as conn:
+            ...         result = conn.execute("SELECT 1")
+            ... except PoolNotFoundError:
+            ...     print("Pool not configured")
         """
         pool = self.get_pool(name)
+        
         if pool is None:
             raise PoolNotFoundError(f"Pool '{name}' not found", pool_name=name)
         return pool
+
+    def connection(self, pool_name: Optional[str] = None):
+        """
+        Get a connection context manager from the specified pool.
+
+        This method provides a convenient way to get a connection directly
+        from the manager without explicitly calling get_pool() first.
+        If pool_name is not specified, uses the first available pool.
+
+        Args:
+            pool_name: Name of the pool to get connection from.
+                      If None, uses the first available pool.
+
+        Returns:
+            Context manager for connection acquisition.
+
+        Raises:
+            PoolNotFoundError: If no pool is found.
+            PoolNotReadyError: If pool is not ready.
+
+        Example:
+            >>> with manager.connection() as conn:
+            ...     result = conn.execute("SELECT 1")
+            >>>
+            >>> # Or with specific pool name
+            >>> with manager.connection("postgres_main") as conn:
+            ...     result = conn.execute("SELECT 1")
+        """
+        if pool_name is None:
+            # Try to get the first available pool
+            if not self._pools:
+                raise PoolNotFoundError("No pools available", pool_name="default")
+            pool = next(iter(self._pools.values()))
+        else:
+            pool = self.get_pool(pool_name)
+
+            if pool is None:
+                raise PoolNotFoundError(
+                    f"Pool '{pool_name}' not found", pool_name=pool_name
+                )
+
+        return pool.connection()
 
     def initialize_from_config(self, config_dict: Dict[str, Any]) -> List[str]:
         """
         Initialize pools from configuration dictionary.
 
+        This method loads pool configurations from a dictionary and creates
+        all enabled pools. Individual pool creation failures are logged but
+        do not prevent other pools from being created.
+
         Args:
-            config_dict: Configuration dictionary
+            config_dict: Configuration dictionary with the following format:
+                {
+                    "pools": {
+                        "pool_name": {
+                            "type": "postgresql",
+                            "enabled": True,
+                            "settings": {...},
+                            "pool": {...}
+                        }
+                    }
+                }
 
         Returns:
-            List[str]: List of created pool names
+            List[str]: List of successfully created pool names.
+
+        Example:
+            >>> config = {
+            ...     "pools": {
+            ...         "postgres_main": {"type": "postgresql", ...},
+            ...         "neo4j_main": {"type": "neo4j", ...}
+            ...     }
+            ... }
+            >>> created = manager.initialize_from_config(config)
+            >>> print(created)  # ["postgres_main", "neo4j_main"]
         """
         created = []
 
-        # Load configurations
         config_names = self._config_manager.load_from_dict(config_dict)
 
         for name in config_names:
@@ -261,19 +409,58 @@ class ConnectionPoolManager:
         return created
 
     def get_all_pools(self) -> Dict[str, BaseConnectionPool]:
-        """Get all pools."""
+        """
+        Get all registered pools.
+
+        Returns:
+            Dict[str, BaseConnectionPool]: A copy of the pools dictionary,
+                mapping pool names to pool instances.
+
+        Example:
+            >>> pools = manager.get_all_pools()
+            >>> for name, pool in pools.items():
+            ...     print(f"{name}: {pool.status}")
+        """
         return self._pools.copy()
 
     def get_pool_names(self) -> List[str]:
-        """Get all pool names."""
+        """
+        Get all pool names.
+
+        Returns:
+            List[str]: List of all registered pool names.
+
+        Example:
+            >>> names = manager.get_pool_names()
+            >>> print(names)  # ["postgres_main", "neo4j_main"]
+        """
         return list(self._pools.keys())
 
     def get_connection_types(self) -> List[str]:
-        """Get all registered connection types."""
+        """
+        Get all registered connection types.
+
+        Returns:
+            List[str]: List of all registered connection type names
+                (e.g., ["postgresql", "neo4j", "httpx", "boto3"]).
+
+        Example:
+            >>> types = manager.get_connection_types()
+            >>> print(types)  # ["postgresql", "neo4j"]
+        """
         return self._plugin_registry.get_all_types()
 
     def shutdown_all(self) -> None:
-        """Shutdown all pools."""
+        """
+        Shutdown all pools.
+
+        This method closes all registered pools and releases their resources.
+        It should be called during application shutdown to ensure clean
+        connection closure.
+
+        Example:
+            >>> manager.shutdown_all()
+        """
         with self._manager_lock:
             for name, pool in list(self._pools.items()):
                 try:
@@ -286,11 +473,39 @@ class ConnectionPoolManager:
             self._pool_locks.clear()
 
     def get_all_metrics(self) -> Dict[str, Any]:
-        """Get metrics for all pools."""
+        """
+        Get metrics for all pools.
+
+        This method collects metrics from all registered pools, useful
+        for monitoring and debugging connection pool health.
+
+        Returns:
+            Dict[str, Any]: Dictionary mapping pool names to their metrics.
+                Each metrics object contains fields like total_created,
+                total_borrowed, active_connections, etc.
+
+        Example:
+            >>> metrics = manager.get_all_metrics()
+            >>> for name, pool_metrics in metrics.items():
+            ...     print(f"{name}: {pool_metrics.active_connections} active")
+        """
         return {name: pool.metrics for name, pool in self._pools.items()}
 
     def reset(self) -> None:
-        """Reset the manager (for testing)."""
+        """
+        Reset the manager (for testing).
+
+        This method completely resets the manager state by shutting down
+        all pools, clearing registries, and resetting the singleton instance.
+        It is primarily intended for use in test environments.
+
+        Warning:
+            This method should not be called in production environments
+            as it will disrupt all active connections.
+
+        Example:
+            >>> manager.reset()  # Clear all state for testing
+        """
         with self._lock:
             with self._manager_lock:
                 self.shutdown_all()
@@ -396,9 +611,24 @@ class ConnectionPoolManager:
         """
         Register multiple plugins at once.
 
+        This method provides a convenient way to register multiple connection
+        type plugins in a single call. Each plugin is registered independently,
+        and failures are logged but do not prevent other plugins from being
+        registered.
+
         Args:
             plugins: Dictionary mapping plugin names to their registration functions.
                 Each function should accept a PluginRegistry instance as argument.
+                Example:
+                {
+                    "postgresql": register_postgresql,
+                    "neo4j": register_neo4j
+                }
+
+        Example:
+            >>> def register_postgresql(registry):
+            ...     registry.register("postgresql", PostgreSQLPool, PostgreSQLConnection)
+            >>> manager.register_plugins({"postgresql": register_postgresql})
         """
         for plugin_name, register_func in plugins.items():
             try:

@@ -41,57 +41,62 @@ Example:
 
 from typing import Any, Dict
 
-# Core components
-from .connection import BaseConnection
-from .connection_pool import BaseConnectionPool, PoolMetrics, PoolStatus
-from .pool_manager import ConnectionPoolManager
-from .plugin_registry import PluginRegistry, ConnectionPlugin
-from .config import ConnectionConfig, ConfigManager, VALID_CONNECTION_TYPES, RESERVED_POOL_NAMES
-
-# Lifecycle management
-from .lifecycle import (
-    ConnectionLifecycleManager,
-    ConnectionPoolLifecycleManager,
-    ConnectionLifecycleContext,
-    ConnectionLifecycleEvent,
-    ConnectionState,
-)
-
-# Plugin integration
-from .integration import (
-    ConnectionPluginIntegration,
-    ConnectionPluginInitializer,
-    create_connection_plugin_initializer,
-)
-
 # Circuit breaker
 from .circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
     CircuitState,
 )
+from .config import (
+    RESERVED_POOL_NAMES,
+    VALID_CONNECTION_TYPES,
+    ConfigManager,
+    ConnectionConfig,
+)
+
+# Core components
+from .connection import BaseConnection
+from .connection_pool import BaseConnectionPool, PoolMetrics, PoolStatus
 
 # Exceptions
 from .exceptions import (
-    ConnectionError,
-    ConnectionTimeoutError,
-    ConnectionFailedError,
     AuthenticationError,
-    ConnectionNotFoundError,
-    ConnectionClosedError,
-    PoolError,
-    PoolExhaustedError,
-    PoolNotReadyError,
-    PoolNotFoundError,
-    PoolAlreadyExistsError,
-    PoolManagerError,
-    PluginNotFoundError,
-    PluginAlreadyExistsError,
+    ConfigNotFoundError,
     ConfigurationError,
     ConfigValidationError,
-    ConfigNotFoundError,
+    ConnectionClosedError,
+    ConnectionError,
+    ConnectionFailedError,
+    ConnectionNotFoundError,
+    ConnectionTimeoutError,
     HealthCheckError,
+    PluginAlreadyExistsError,
+    PluginNotFoundError,
+    PoolAlreadyExistsError,
+    PoolError,
+    PoolExhaustedError,
+    PoolManagerError,
+    PoolNotFoundError,
+    PoolNotReadyError,
 )
+
+# Plugin integration
+from .integration import (
+    ConnectionPluginInitializer,
+    ConnectionPluginIntegration,
+    create_connection_plugin_initializer,
+)
+
+# Lifecycle management
+from .lifecycle import (
+    ConnectionLifecycleContext,
+    ConnectionLifecycleEvent,
+    ConnectionLifecycleManager,
+    ConnectionPoolLifecycleManager,
+    ConnectionState,
+)
+from .plugin_registry import ConnectionPlugin, PluginRegistry
+from .pool_manager import ConnectionPoolManager
 
 # Try to import optional connection implementations
 try:
@@ -125,13 +130,13 @@ PoolManager = ConnectionPoolManager
 # Import validators
 from .connection_validator import (
     BaseConnectionValidator,
+    Boto3ConnectionValidator,
     ConnectionValidationResult,
+    HTTPXConnectionValidator,
+    Neo4jConnectionValidator,
+    PostgreSQLConnectionValidator,
     ValidationLevel,
     ValidationMessage,
-    PostgreSQLConnectionValidator,
-    Neo4jConnectionValidator,
-    HTTPXConnectionValidator,
-    Boto3ConnectionValidator,
     get_validator_for_config,
     validate_connection_config,
 )
@@ -224,8 +229,11 @@ def init(config: Dict[str, Any]) -> ConnectionPoolManager:
         # Standard format: config is directly the pools configuration
         # Filter out reserved keys that are not pool configurations
         reserved_keys = {
-            "enabled", "type", "module_name",
-            "class_name", "function_name"
+            "enabled",
+            "type",
+            "module_name",
+            "class_name",
+            "function_name",
         }
         pools_config = {
             name: pool_config
@@ -236,6 +244,7 @@ def init(config: Dict[str, Any]) -> ConnectionPoolManager:
     # Process pool configurations and collect connection types to register
     processed_config = {}
     connection_types_to_register = set()
+
     for name, pool_config in pools_config.items():
         if isinstance(pool_config, dict):
             # Ensure type is set if not present
@@ -255,8 +264,7 @@ def init(config: Dict[str, Any]) -> ConnectionPoolManager:
 
 
 def _register_default_connection_types(
-    manager: ConnectionPoolManager,
-    types_to_register: set
+    manager: ConnectionPoolManager, types_to_register: set
 ) -> None:
     """
     Register default connection types for the given type names.
@@ -295,7 +303,9 @@ def _register_default_connection_types(
             connection_class = _import_class(connection_path)
 
             if pool_class and connection_class:
-                manager.register_connection_type(type_name, pool_class, connection_class)
+                manager.register_connection_type(
+                    type_name, pool_class, connection_class
+                )
         except Exception:
             # Ignore registration errors (e.g., missing dependencies)
             pass
@@ -333,24 +343,20 @@ __all__ = [
     "PoolStatus",
     "VALID_CONNECTION_TYPES",
     "RESERVED_POOL_NAMES",
-
     # Lifecycle management
     "ConnectionLifecycleManager",
     "ConnectionPoolLifecycleManager",
     "ConnectionLifecycleContext",
     "ConnectionLifecycleEvent",
     "ConnectionState",
-
     # Plugin integration
     "ConnectionPluginIntegration",
     "ConnectionPluginInitializer",
     "create_connection_plugin_initializer",
-
     # Circuit breaker
     "CircuitBreaker",
     "CircuitBreakerConfig",
     "CircuitState",
-
     # Validators
     "BaseConnectionValidator",
     "ConnectionValidationResult",
@@ -362,10 +368,8 @@ __all__ = [
     "Boto3ConnectionValidator",
     "get_validator_for_config",
     "validate_connection_config",
-
     # Functions
     "init",
-
     # Exceptions
     "ConnectionError",
     "ConnectionTimeoutError",
@@ -385,7 +389,6 @@ __all__ = [
     "ConfigValidationError",
     "ConfigNotFoundError",
     "HealthCheckError",
-
     # Connection implementations (may be None if dependencies not installed)
     "PostgreSQLConnection",
     "PostgreSQLPool",

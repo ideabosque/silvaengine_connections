@@ -12,7 +12,20 @@ authors = [
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.0",
+]
+
+[project.optional-dependencies]
+neo4j = ["neo4j>=5.0"]
+httpx = ["httpx>=0.24"]
+boto3 = ["boto3>=1.26"]
+all = [
+    "neo4j>=5.0",
+    "httpx>=0.24",
+    "boto3>=1.26",
+]
 
 [tool.setuptools]
 include-package-data = true

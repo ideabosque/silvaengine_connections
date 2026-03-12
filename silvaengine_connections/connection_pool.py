@@ -63,6 +63,7 @@ class BaseConnectionPool(ABC, Generic[C]):
     - Dynamic resizing
     - Comprehensive metrics
     - Thread-safe operations
+    - Lazy initialization support for fast startup
 
     Type Parameters:
         C: Connection type, must be a subclass of BaseConnection
@@ -76,8 +77,10 @@ class BaseConnectionPool(ABC, Generic[C]):
             def _create_connection(self) -> PostgreSQLConnection:
                 return PostgreSQLConnection(self._config)
 
-        # Usage
+        # Usage with lazy initialization (default)
         pool = PostgreSQLPool("main", PostgreSQLConnection, min_size=2, max_size=10)
+        # Pool is ready immediately, connections created on first use
+
         with pool.connection() as connection:
             result = connection.execute("SELECT 1")
         ```
@@ -95,6 +98,7 @@ class BaseConnectionPool(ABC, Generic[C]):
         health_check_interval: float = 30.0,
         enable_dynamic_resize: bool = True,
         circuit_breaker_config: Optional[CircuitBreakerConfig] = None,
+        lazy_init: bool = True,
     ) -> None:
         """
         Initialize the connection pool.
@@ -110,6 +114,8 @@ class BaseConnectionPool(ABC, Generic[C]):
             health_check_interval: Health check interval in seconds
             enable_dynamic_resize: Whether to enable dynamic resizing
             circuit_breaker_config: Circuit breaker configuration
+            lazy_init: If True, defer connection creation until first use
+                      (reduces startup time by ~100-460ms)
         """
         self._name = name
         self._connection_class = connection_class
@@ -121,10 +127,12 @@ class BaseConnectionPool(ABC, Generic[C]):
         self._health_check_interval = health_check_interval
         self._enable_dynamic_resize = enable_dynamic_resize
         self._circuit_breaker_config = circuit_breaker_config
+        self._lazy_init = lazy_init
 
         self._status = PoolStatus.INITIALIZING
         self._metrics = PoolMetrics()
         self._lock = threading.RLock()
+        self._init_lock = threading.Lock()
         self._logger = logging.getLogger(f"{__name__}.{name}")
 
         if circuit_breaker_config is not None:
@@ -138,7 +146,20 @@ class BaseConnectionPool(ABC, Generic[C]):
         self._idle_connections: queue.Queue[C] = queue.Queue(maxsize=max_size)
         self._active_connections: Dict[int, C] = {}
 
-        self._initialize_pool()
+        # Track if pool has been lazily initialized
+        self._lazily_initialized = False
+
+        if lazy_init:
+            # Fast path: mark as ready without creating connections
+            self._status = PoolStatus.READY
+            self._logger.info(
+                f"Pool initialized (lazy): {self._name} "
+                f"(type={self.get_pool_type()}, "
+                f"min={self._min_size}, max={self._max_size})"
+            )
+        else:
+            # Traditional path: create connections immediately
+            self._initialize_pool()
 
     @property
     def name(self) -> str:
@@ -205,6 +226,21 @@ class BaseConnectionPool(ABC, Generic[C]):
                 f"min={self._min_size}, max={self._max_size})"
             )
 
+    def _ensure_initialized(self) -> None:
+        """
+        Ensure pool is initialized (lazy initialization).
+
+        This method is called before acquiring a connection to ensure
+        the pool has been properly initialized when using lazy mode.
+        Thread-safe using double-checked locking pattern.
+        """
+        if self._lazy_init and not self._lazily_initialized:
+            with self._init_lock:
+                if not self._lazily_initialized:
+                    self._logger.debug(f"Lazy initializing pool: {self._name}")
+                    self._initialize_pool()
+                    self._lazily_initialized = True
+
     def acquire(self) -> C:
         """
         Acquire a connection from the pool.
@@ -216,6 +252,9 @@ class BaseConnectionPool(ABC, Generic[C]):
             PoolNotReadyError: If pool is not ready
             PoolExhaustedError: If pool is exhausted
         """
+        # Ensure lazy initialization is complete before acquiring
+        self._ensure_initialized()
+
         if self._status != PoolStatus.READY:
             raise PoolNotReadyError(
                 f"Pool {self._name} is not ready",
