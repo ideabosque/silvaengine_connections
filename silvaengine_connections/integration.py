@@ -21,9 +21,9 @@ import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, Dict, List, Optional, Type, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
-from .config import ConnectionConfig, ConfigManager
+from .config import ConfigManager, ConnectionConfig
 from .connection import BaseConnection
 from .connection_pool import BaseConnectionPool
 from .exceptions import (
@@ -48,8 +48,7 @@ _CONNECTION_TYPE_MODULES = {
 for _type_name, (_pool_cls, _conn_cls) in _CONNECTION_TYPE_MODULES.items():
     try:
         _module = __import__(
-            f".connections.{_type_name}",
-            fromlist=[_pool_cls, _conn_cls]
+            f".connections.{_type_name}", fromlist=[_pool_cls, _conn_cls]
         )
         globals()[_pool_cls] = getattr(_module, _pool_cls)
         globals()[_conn_cls] = getattr(_module, _conn_cls)
@@ -92,7 +91,9 @@ class ConnectionPluginIntegration:
 
     # Pre-imported connection types (avoids dynamic import overhead)
     DEFAULT_CONNECTION_TYPES: Dict[str, Tuple[Optional[Type], Optional[Type]]] = {
-        "postgresql": (PostgreSQLPool, PostgreSQLConnection) if _POSTGRESQL_AVAILABLE else (None, None),
+        "postgresql": (PostgreSQLPool, PostgreSQLConnection)
+        if _POSTGRESQL_AVAILABLE
+        else (None, None),
         "neo4j": (Neo4jPool, Neo4jConnection) if _NEO4J_AVAILABLE else (None, None),
         "httpx": (HTTPXPool, HTTPXConnection) if _HTTPX_AVAILABLE else (None, None),
         "boto3": (Boto3Pool, Boto3Connection) if _BOTO3_AVAILABLE else (None, None),
@@ -114,9 +115,7 @@ class ConnectionPluginIntegration:
         self._warmup_complete = threading.Event()
         self._parallel_init = True  # Enable parallel initialization by default
 
-    def initialize_from_config(
-        self, config: Dict[str, Any]
-    ) -> ConnectionPoolManager:
+    def initialize_from_config(self, config: Dict[str, Any]) -> ConnectionPoolManager:
         """
         Initialize connection pools from PluginManager configuration.
 
@@ -173,9 +172,7 @@ class ConnectionPluginIntegration:
 
         except Exception as e:
             self._logger.error(f"Failed to initialize connection plugin: {e}")
-            raise ConnectionFailedError(
-                f"Connection plugin initialization failed: {e}"
-            )
+            raise ConnectionFailedError(f"Connection plugin initialization failed: {e}")
 
     def _register_default_connection_types(self) -> None:
         """
@@ -183,7 +180,10 @@ class ConnectionPluginIntegration:
 
         Uses pre-imported types for faster initialization (~50-100ms improvement).
         """
-        for type_name, (pool_class, connection_class) in self.DEFAULT_CONNECTION_TYPES.items():
+        for type_name, (
+            pool_class,
+            connection_class,
+        ) in self.DEFAULT_CONNECTION_TYPES.items():
             try:
                 # Use pre-imported classes directly (no dynamic import overhead)
                 if pool_class is not None and connection_class is not None:
@@ -214,7 +214,7 @@ class ConnectionPluginIntegration:
         """
         if parallel and len(config) > 1:
             return self._create_pools_parallel(config)
-        
+
         # Sequential creation (inline for simplicity)
         created = []
         for pool_name, pool_config in config.items():
@@ -286,6 +286,24 @@ class ConnectionPluginIntegration:
             # Create pool using lifecycle manager
             pool = self._lifecycle_manager.create_pool(pool_name, connection_config)
 
+            # Close the previously-registered pool (if any) before overwriting
+            # the manager slot. Otherwise the old pool's connections (each
+            # holding a live SQLAlchemy Engine / DBAPI connection) are orphaned
+            # without ``dispose()``, leaking server-side connections until PG's
+            # ``max_connections`` is exhausted — which then surfaces as
+            # ``Pool <name> exhausted`` on subsequent re-initializations.
+            old_pool = self._pool_manager._pools.get(pool_name)
+            if old_pool is not None and old_pool is not pool:
+                try:
+                    old_pool.close()
+                    self._logger.info(
+                        f"Closed previous pool '{pool_name}' before re-creating"
+                    )
+                except Exception as e:
+                    self._logger.warning(
+                        f"Error closing previous pool '{pool_name}': {e}"
+                    )
+
             # Also register in pool manager for external access
             self._pool_manager._pools[pool_name] = pool
 
@@ -318,7 +336,7 @@ class ConnectionPluginIntegration:
             for pool_name, pool in pools.items():
                 try:
                     # Trigger lazy initialization by acquiring and releasing a connection
-                    if hasattr(pool, '_ensure_initialized'):
+                    if hasattr(pool, "_ensure_initialized"):
                         pool._ensure_initialized()
                         self._logger.info(f"Pool '{pool_name}' warmed up")
                 except Exception as e:
