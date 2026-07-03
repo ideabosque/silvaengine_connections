@@ -84,7 +84,7 @@ class PostgreSQLConnection(BaseConnection[Engine]):
             )
 
         # Build connection URL
-        url = f"postgresql+psycopg2://{username}:{password}@{host}:{port}/{database}"
+        url = f"postgresql+psycopg://{username}:{password}@{host}:{port}/{database}"
 
         # Add SSL parameters
         ssl_mode = self._config.get('ssl_mode')
