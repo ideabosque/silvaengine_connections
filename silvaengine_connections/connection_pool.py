@@ -263,6 +263,7 @@ class BaseConnectionPool(ABC, Generic[C]):
             )
 
         start_time = time.time()
+        deadline = start_time + self._wait_timeout
 
         with self._lock:
             # Try to get from idle queue
@@ -303,9 +304,17 @@ class BaseConnectionPool(ABC, Generic[C]):
                 except Exception as e:
                     self._logger.error(f"Failed to create new connection: {e}")
 
-        # Wait for available connection
+        # Wait for available connection, respecting the original deadline
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            raise PoolExhaustedError(
+                f"Pool {self._name} exhausted, "
+                f"unable to acquire connection within {self._wait_timeout}s",
+                pool_name=self._name,
+            )
+
         try:
-            connection = self._idle_connections.get(timeout=self._wait_timeout)
+            connection = self._idle_connections.get(timeout=remaining)
             wait_time = time.time() - start_time
 
             with self._lock:
@@ -321,8 +330,10 @@ class BaseConnectionPool(ABC, Generic[C]):
                 else:
                     # Connection invalid, destroy and retry
                     self._destroy_connection(connection)
-                    # Retry within the same acquire call to avoid recursion
-                    return self._acquire_with_retry()
+                    # Retry within the same acquire call, passing the
+                    # remaining time budget to prevent exceeding
+                    # wait_timeout through repeated retries.
+                    return self._acquire_with_retry(deadline=deadline)
 
         except queue.Empty:
             raise PoolExhaustedError(
@@ -331,9 +342,14 @@ class BaseConnectionPool(ABC, Generic[C]):
                 pool_name=self._name,
             )
 
-    def _acquire_with_retry(self) -> C:
+    def _acquire_with_retry(self, deadline: Optional[float] = None) -> C:
         """
         Retry acquiring a connection without recursion.
+
+        Args:
+            deadline: Absolute time (epoch seconds) by which the acquire
+                must complete. When set, retries will not exceed this
+                deadline so that the overall wait_timeout is respected.
 
         Returns:
             C: Connection object
@@ -341,6 +357,14 @@ class BaseConnectionPool(ABC, Generic[C]):
         Raises:
             PoolExhaustedError: If pool is exhausted
         """
+        # Check if we've exceeded the original acquire deadline
+        if deadline is not None and time.time() >= deadline:
+            raise PoolExhaustedError(
+                f"Pool {self._name} exhausted, "
+                f"unable to acquire connection within {self._wait_timeout}s",
+                pool_name=self._name,
+            )
+
         # Try to get from idle queue without waiting
         try:
             connection = self._idle_connections.get(block=False)
@@ -355,8 +379,9 @@ class BaseConnectionPool(ABC, Generic[C]):
                 return connection
             else:
                 self._destroy_connection(connection)
-                # Try one more time
-                return self._acquire_with_retry()
+                # Try one more time, passing the deadline to prevent
+                # unbounded recursion exceeding wait_timeout.
+                return self._acquire_with_retry(deadline=deadline)
         except queue.Empty:
             # No idle connections available, try to create new one
             with self._lock:
@@ -367,7 +392,9 @@ class BaseConnectionPool(ABC, Generic[C]):
                 if total_connections < self._max_size:
                     try:
                         if self._circuit_breaker is not None:
-                            connection = self._circuit_breaker.call(self._create_connection)
+                            connection = self._circuit_breaker.call(
+                                self._create_connection
+                            )
                         else:
                             connection = self._create_connection()
                         connection.is_used = True
@@ -455,7 +482,12 @@ class BaseConnectionPool(ABC, Generic[C]):
         if not connection.is_used and connection.get_idle_time() > self._max_idle_time:
             return False
 
-        # Health check
+        # Health check — skip when the underlying driver already performs
+        # its own pre-ping (e.g. SQLAlchemy pool_pre_ping=True), avoiding a
+        # redundant round-trip per acquire.
+        if getattr(connection, "_has_driver_pre_ping", False):
+            return True
+
         return connection.is_healthy()
 
     def _destroy_connection(self, connection: C) -> None:
@@ -520,7 +552,9 @@ class BaseConnectionPool(ABC, Generic[C]):
                 for _ in range(self._min_size - current_total):
                     try:
                         if self._circuit_breaker is not None:
-                            connection = self._circuit_breaker.call(self._create_connection)
+                            connection = self._circuit_breaker.call(
+                                self._create_connection
+                            )
                         else:
                             connection = self._create_connection()
                         self._idle_connections.put(connection)

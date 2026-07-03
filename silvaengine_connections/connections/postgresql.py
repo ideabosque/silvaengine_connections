@@ -129,6 +129,10 @@ class PostgreSQLConnection(BaseConnection[Engine]):
                 **pool_kwargs
             )
 
+            # SQLAlchemy pool_pre_ping handles liveness checks,
+            # so the pool manager can skip our own is_healthy() probe.
+            self._has_driver_pre_ping = bool(pool_kwargs.get("pool_pre_ping"))
+
             # Verify connection
             with self._engine.connect() as connection:
                 connection.execute(text("SELECT 1"))

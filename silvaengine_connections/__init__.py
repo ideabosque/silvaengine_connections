@@ -260,6 +260,17 @@ def init(config: Dict[str, Any]) -> ConnectionPoolManager:
     if processed_config:
         manager.create_pools_from_config(processed_config)
 
+    # Validate that at least one pool was created when configuration was
+    # provided.  An empty manager silently returned here would cause the
+    # plugin system to report READY while every database access fails
+    # with PoolNotFoundError.
+    if processed_config and not manager.get_pool_names():
+        from .exceptions import ConfigurationError
+
+        raise ConfigurationError(
+            f"init() produced 0 usable pools from {len(processed_config)} config(s)"
+        )
+
     return manager
 
 

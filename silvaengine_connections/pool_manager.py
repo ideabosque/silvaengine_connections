@@ -547,7 +547,7 @@ class ConnectionPoolManager:
                 }
 
         Returns:
-            List[str]: List of successfully created pool names.
+            :return: List of successfully created pool names.
         """
         created = []
         last_error: Optional[Exception] = None
@@ -573,11 +573,16 @@ class ConnectionPoolManager:
                 last_error = e
                 self._logger.error(f"Failed to create pool {pool_name}: {e}")
 
-        # If no pools were created despite non-empty config, surface the last
-        # error instead of silently returning an empty list.  This prevents
-        # init() from reporting success with zero usable pools.
-        if not created and pools_config and last_error is not None:
-            raise last_error
+        # If no pools were created despite non-empty config, surface the
+        # error instead of silently returning an empty list.  This covers
+        # both creation failures (last_error set) and all-disabled configs
+        # (last_error is None but no pools were created).
+        if not created and pools_config:
+            if last_error is not None:
+                raise last_error
+            raise RuntimeError(
+                f"No pools were created from {len(pools_config)} config(s) — all disabled or invalid"
+            )
 
         return created
 
