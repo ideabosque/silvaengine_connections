@@ -7,6 +7,7 @@ Implements hot-pluggable connection pool management with support for
 dynamic registration, configuration updates, and lifecycle management.
 """
 
+import inspect
 import logging
 import threading
 from typing import Any, Dict, List, Optional, Type
@@ -223,10 +224,22 @@ class ConnectionPoolManager:
 
             plugin = self._plugin_registry.get_safe(config.type)
             config = self._config_manager.apply_defaults(config)
+
+            # Only pass pool_settings keys that the pool class's __init__
+            # actually accepts.  Keys like ``recycle`` belong to the inner
+            # connection (e.g. SQLAlchemy pool_recycle) and are carried via
+            # ``config.pool_settings`` → ``PostgreSQLConnection._pool_config``;
+            # they must NOT be unpacked into the pool wrapper constructor.
+            init_sig = inspect.signature(plugin.pool_class.__init__)
+            accepted_params = set(init_sig.parameters.keys())
+            pool_kwargs = {
+                k: v for k, v in config.pool_settings.items() if k in accepted_params
+            }
+
             pool = plugin.pool_class(
                 name=name,
                 config=config,
-                **config.pool_settings,
+                **pool_kwargs,
             )
 
             self._pools[name] = pool
@@ -310,7 +323,7 @@ class ConnectionPoolManager:
             ...     print("Pool not configured")
         """
         pool = self.get_pool(name)
-        
+
         if pool is None:
             raise PoolNotFoundError(f"Pool '{name}' not found", pool_name=name)
         return pool
@@ -537,6 +550,7 @@ class ConnectionPoolManager:
             List[str]: List of successfully created pool names.
         """
         created = []
+        last_error: Optional[Exception] = None
 
         for pool_name, pool_config in pools_config.items():
             try:
@@ -556,7 +570,14 @@ class ConnectionPoolManager:
                 )
 
             except Exception as e:
+                last_error = e
                 self._logger.error(f"Failed to create pool {pool_name}: {e}")
+
+        # If no pools were created despite non-empty config, surface the last
+        # error instead of silently returning an empty list.  This prevents
+        # init() from reporting success with zero usable pools.
+        if not created and pools_config and last_error is not None:
+            raise last_error
 
         return created
 
