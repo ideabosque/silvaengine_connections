@@ -13,13 +13,13 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Generic, Iterator, List, Optional, Type, TypeVar
+from typing import Dict, Generic, Iterator, Optional, Type, TypeVar
 
-from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
+from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 from .connection import BaseConnection
-from .exceptions import PoolError, PoolExhaustedError, PoolNotReadyError
+from .exceptions import PoolExhaustedError, PoolNotReadyError
 
 C = TypeVar("C", bound=BaseConnection)
 

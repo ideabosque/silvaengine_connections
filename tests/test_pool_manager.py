@@ -11,17 +11,14 @@ configuration management.
 import logging
 import threading
 import unittest
-from typing import Any, Dict
-from unittest.mock import MagicMock, Mock, patch
 
 from silvaengine_connections.connection import BaseConnection
-from silvaengine_connections.connection_pool import BaseConnectionPool, PoolMetrics, PoolStatus
+from silvaengine_connections.connection_pool import BaseConnectionPool, PoolMetrics
 from silvaengine_connections.config import ConnectionConfig
 from silvaengine_connections.exceptions import (
     PoolAlreadyExistsError,
     PoolNotFoundError,
     PluginAlreadyExistsError,
-    PluginNotFoundError,
 )
 from silvaengine_connections.pool_manager import ConnectionPoolManager
 

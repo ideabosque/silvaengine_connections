@@ -12,8 +12,7 @@ from urllib.parse import quote_plus
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import OperationalError, SQLAlchemyError
-from sqlalchemy.exc import TimeoutError as SATimeoutError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.pool import NullPool, QueuePool
 
 from ..config import ConnectionConfig
@@ -22,8 +21,6 @@ from ..connection_pool import BaseConnectionPool
 from ..exceptions import (
     ConfigValidationError,
     ConnectionError,
-    ConnectionTimeoutError,
-    HealthCheckError,
     PoolError,
 )
 

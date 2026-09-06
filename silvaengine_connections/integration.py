@@ -21,19 +21,15 @@ import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 from .config import ConfigManager, ConnectionConfig
-from .connection import BaseConnection
 from .connection_pool import BaseConnectionPool
 from .exceptions import (
     ConfigValidationError,
     ConnectionFailedError,
-    PluginNotFoundError,
-    PoolAlreadyExistsError,
 )
-from .lifecycle import ConnectionPoolLifecycleManager, ConnectionState
-from .plugin_registry import ConnectionPlugin, PluginRegistry
+from .lifecycle import ConnectionPoolLifecycleManager
 from .pool_manager import ConnectionPoolManager
 
 # Pre-import connection types at module level to avoid dynamic import overhead

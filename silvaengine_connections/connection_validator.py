@@ -15,10 +15,9 @@ import socket
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 
 from .config import ConnectionConfig
-from .exceptions import ConfigValidationError, ConnectionFailedError
 
 
 class ValidationLevel(Enum):

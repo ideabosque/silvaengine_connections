@@ -7,7 +7,6 @@ Supported services include: S3, DynamoDB, SQS, SNS, Lambda, EC2, etc.
 
 import logging
 import time
-from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, TypeVar
 
 import boto3
@@ -30,7 +29,6 @@ from ..exceptions import (
     ConfigValidationError,
     ConnectionError,
     ConnectionTimeoutError,
-    HealthCheckError,
     PoolError,
 )
 
@@ -650,7 +648,6 @@ class Boto3ConnectionPool(BaseConnectionPool[Boto3Connection]):
         self, function_name: str, payload: Any, **kwargs
     ) -> Dict[str, Any]:
         """Invoke Lambda function"""
-        import base64
         import json
 
         if isinstance(payload, dict):

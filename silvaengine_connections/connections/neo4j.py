@@ -11,8 +11,8 @@ import time
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional, TypeVar
 
-from neo4j import Driver, GraphDatabase, Session, Transaction
-from neo4j.exceptions import AuthError, ClientError, Neo4jError, ServiceUnavailable
+from neo4j import Driver, GraphDatabase, Session
+from neo4j.exceptions import AuthError, Neo4jError, ServiceUnavailable
 
 from ..config import ConnectionConfig
 from ..connection import BaseConnection
@@ -21,8 +21,6 @@ from ..exceptions import (
     AuthenticationError,
     ConfigValidationError,
     ConnectionError,
-    ConnectionTimeoutError,
-    HealthCheckError,
     PoolError,
 )
 

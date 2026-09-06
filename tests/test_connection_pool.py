@@ -7,8 +7,7 @@ Unit tests for Connection Pool.
 import pytest
 import threading
 import time
-from typing import Any, Dict
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 
 from silvaengine_connections import (
     BaseConnectionPool,

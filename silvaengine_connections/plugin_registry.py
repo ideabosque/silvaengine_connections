@@ -7,7 +7,7 @@ Manages dynamic registration and discovery of connection types.
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Type
+from typing import Dict, List, Optional, Type
 import threading
 
 from .connection import BaseConnection

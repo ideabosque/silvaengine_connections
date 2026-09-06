@@ -8,7 +8,7 @@ Provides configuration parsing, validation, and management for connection pools.
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 
 from .exceptions import ConfigNotFoundError, ConfigValidationError
 

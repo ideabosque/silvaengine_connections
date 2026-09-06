@@ -17,23 +17,19 @@ modularity, consistency, and maintainability.
 import logging
 import threading
 import time
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
 
 from .config import ConnectionConfig, ConfigManager
 from .connection import BaseConnection
 from .connection_pool import BaseConnectionPool, PoolMetrics, PoolStatus
 from .exceptions import (
     ConfigValidationError,
-    ConnectionError,
     ConnectionFailedError,
     ConnectionNotFoundError,
     PoolAlreadyExistsError,
-    PoolError,
     PoolNotFoundError,
-    PluginNotFoundError,
 )
 from .plugin_registry import ConnectionPlugin, PluginRegistry
 

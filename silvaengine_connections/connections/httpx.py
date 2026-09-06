@@ -6,8 +6,7 @@ Asynchronous/synchronous HTTP client connection pool implementation based on HTT
 
 import logging
 import time
-from contextlib import contextmanager
-from typing import Any, Coroutine, Dict, Iterator, Optional, TypeVar, Union
+from typing import Any, Coroutine, Dict, Optional, TypeVar, Union
 
 import httpx
 from httpx import AsyncClient, Client, Response, Timeout
@@ -16,10 +15,8 @@ from ..config import ConnectionConfig
 from ..connection import BaseConnection
 from ..connection_pool import BaseConnectionPool
 from ..exceptions import (
-    ConfigValidationError,
     ConnectionError,
     ConnectionTimeoutError,
-    HealthCheckError,
     PoolError,
 )
 

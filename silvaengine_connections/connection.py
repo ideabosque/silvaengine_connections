@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Generic, Optional, TypeVar
 from types import TracebackType
 
-from .exceptions import ConnectionClosedError, ConnectionError
+from .exceptions import ConnectionClosedError
 
 T = TypeVar('T')
 

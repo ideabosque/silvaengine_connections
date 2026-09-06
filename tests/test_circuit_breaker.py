@@ -7,8 +7,6 @@ Unit tests for Circuit Breaker.
 import pytest
 import threading
 import time
-from typing import Any, Callable
-from unittest.mock import Mock, patch
 
 from silvaengine_connections import (
     CircuitBreaker,

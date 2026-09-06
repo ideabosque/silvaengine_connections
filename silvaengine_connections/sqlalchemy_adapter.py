@@ -11,23 +11,16 @@ import logging
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Generator, List, Optional, Type
+from typing import Any, Dict, Generator, List, Optional
 from urllib.parse import quote_plus
 
 from sqlalchemy import create_engine, Engine, text
 from sqlalchemy.orm import Session, sessionmaker, SessionFactory
-from sqlalchemy.pool import QueuePool, NullPool, Pool
+from sqlalchemy.pool import QueuePool
 
-from silvaengine_utility import Invoker
-
-from .connection import BaseConnection
-from .connection_pool import BaseConnectionPool, PoolStatus
+from .connection_pool import BaseConnectionPool
 from .config import ConnectionConfig
-from .exceptions import (
-    ConnectionError,
-    PoolError,
-    ConfigurationError,
-)
+from .exceptions import PoolError
 
 
 @dataclass
