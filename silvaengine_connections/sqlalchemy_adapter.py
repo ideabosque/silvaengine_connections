@@ -12,6 +12,7 @@ import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Generator, List, Optional, Type
+from urllib.parse import quote_plus
 
 from sqlalchemy import create_engine, Engine, text
 from sqlalchemy.orm import Session, sessionmaker, SessionFactory
@@ -78,9 +79,12 @@ def create_engine_config(
         password = settings.get("password", "")
 
         if password:
-            url = f"postgresql://{username}:{password}@{host}:{port}/{database}"
+            url = (
+                f"postgresql://{quote_plus(username)}:{quote_plus(password)}"
+                f"@{host}:{port}/{database}"
+            )
         else:
-            url = f"postgresql://{username}@{host}:{port}/{database}"
+            url = f"postgresql://{quote_plus(username)}@{host}:{port}/{database}"
 
     pool_settings = connection_config.pool_settings
 

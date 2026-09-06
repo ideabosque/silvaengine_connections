@@ -8,6 +8,7 @@ import logging
 import time
 from contextlib import contextmanager
 from typing import Any, Dict, Optional, TypeVar
+from urllib.parse import quote_plus
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -144,8 +145,12 @@ class PostgreSQLConnection(BaseConnection[Engine]):
                 config_key="postgresql.connection",
             )
 
-        # Build connection URL
-        url = f"postgresql+psycopg://{username}:{password}@{host}:{port}/{database}"
+        # Build connection URL (URL-encode credentials so passwords
+        # containing reserved characters like `@` do not break parsing)
+        url = (
+            f"postgresql+psycopg://{quote_plus(username)}:{quote_plus(password)}"
+            f"@{host}:{port}/{database}"
+        )
 
         # Add SSL parameters
         ssl_mode = self._config.get("ssl_mode")
