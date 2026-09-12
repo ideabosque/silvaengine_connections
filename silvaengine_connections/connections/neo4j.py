@@ -16,7 +16,7 @@ from neo4j.exceptions import AuthError, Neo4jError, ServiceUnavailable
 
 from ..config import ConnectionConfig
 from ..connection import BaseConnection
-from ..connection_pool import BaseConnectionPool
+from ..connection_pool import BaseConnectionPool, PoolStatus
 from ..exceptions import (
     AuthenticationError,
     ConfigValidationError,
